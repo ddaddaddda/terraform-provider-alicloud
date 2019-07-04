@@ -212,7 +212,64 @@ func isComputed(s *schema.Schema)bool{
 	return s.Computed
 }
 
-init
+func iterateSingleFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+	switch sch.Type {
+	case schema.TypeInt,schema.TypeString,schema.TypeFloat,schema.TypeBool:
+		buf.WriteString(addIndentation(indentation))
+		buf.WriteString(key)
+		buf.WriteString(" = \"")
+		buf.WriteString(getValue(key))
+		buf.WriteString("\"\n")
+	case schema.TypeSet,schema.TypeList:
+		iterateListFunc(buf,indentation,key,sch)
+	case schema.TypeMap:
+	}
+}
+
+func iterateListFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+	elemVal := getRealValueType(reflect.ValueOf(sch.Elem))
+	if elemVal.Type().String() == "*schema.Resource" {
+		resourceElem := elemVal.Interface().(*schema.Resource)
+		buf.WriteString("map[string]interface{}{\n")
+		for key,sch := range resourceElem.Schema {
+			iterateResourceFunc(buf,indentation + CHILDINDEND,key,sch)
+		}
+		buf.WriteString(addIndentation(indentation))
+		buf.WriteString("}\n")
+	} else {
+		getValue(key)
+		switch sch.Type {
+		case schema.TypeInt:
+		case schema.TypeString:
+		case schema.TypeFloat :
+		case schema.TypeBool:
+		}
+	}
+}
+
+func iterateResourceFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+	switch sch.Type {
+	case schema.TypeInt,schema.TypeString,schema.TypeFloat,schema.TypeBool:
+		buf.WriteString(addIndentation(indentation))
+		buf.WriteString(key)
+		buf.WriteString(" : \"")
+		buf.WriteString(getValue(key))
+		buf.WriteString("\"\n")
+	case schema.TypeSet,schema.TypeList:
+		iterateListFunc(buf,indentation,key,sch)
+	case schema.TypeMap:
+	}
+}
+
+func getValue(key string)string{
+	return key + "value"
+}
+
+func getConfigMapIterate(indentation int,buf *bytes.Buffer)func(string,*schema.Schema){
+	return func(key string,shc *schema.Schema){
+
+	}
+}
 
 
 
