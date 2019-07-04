@@ -134,16 +134,10 @@ func initSchemaClassify(resourceName string)*schemaClassify{
 }
 
 func(sc *schemaClassify)getStep0Config()string{
-	buf :=bytes.NewBufferString("resource ")
-	buf.WriteString(sc.resourceName)
-	buf.WriteString(" default{\n")
-	iterateFunc := func(key string,sch *schema.Schema){
-		buf.WriteString("  " + key + " = \"" + key + "Value\"\n")
-	}
+	buf :=bytes.NewBufferString("")
+	iterateFunc := buildIterateFunc(buf)
 	sc.iterateRequired(iterateFunc)
 	sc.iterateForceNew(iterateFunc)
-	buf.WriteString("}\n")
-
 	return buf.String()
 }
 
@@ -212,64 +206,87 @@ func isComputed(s *schema.Schema)bool{
 	return s.Computed
 }
 
-func iterateSingleFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+func buildIterateFunc(buf *bytes.Buffer) func(string,*schema.Schema){
+	return func(key string,sch *schema.Schema){
+		iterateSchemaFunc(buf,0,key,sch)
+	}
+}
+
+
+func iterateSchemaFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+	buf.WriteString(addIndentation(indentation))
+	buf.WriteString(key)
+	buf.WriteString(" = ")
 	switch sch.Type {
 	case schema.TypeInt,schema.TypeString,schema.TypeFloat,schema.TypeBool:
+		buf.WriteString("\"")
+		buf.WriteString(getValue(key))
+		buf.WriteString("\"\n")
+	case schema.TypeSet,schema.TypeList:
+		buf.WriteString("[]interface{}{")
+		iterateListFunc(buf,indentation + CHILDINDEND,key,sch)
 		buf.WriteString(addIndentation(indentation))
+		buf.WriteString("}\n")
+	case schema.TypeMap:
+		buf.WriteString("map[string]string{/n")
+		buf.WriteString(addIndentation(indentation + CHILDINDEND))
 		buf.WriteString(key)
 		buf.WriteString(" = \"")
 		buf.WriteString(getValue(key))
 		buf.WriteString("\"\n")
-	case schema.TypeSet,schema.TypeList:
-		iterateListFunc(buf,indentation,key,sch)
-	case schema.TypeMap:
+		buf.WriteString(addIndentation(indentation))
+		buf.WriteString("}\n")
 	}
 }
 
-func iterateListFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+func iterateListFunc(buf *bytes.Buffer,indentation int,parentKey string,sch *schema.Schema){
 	elemVal := getRealValueType(reflect.ValueOf(sch.Elem))
 	if elemVal.Type().String() == "*schema.Resource" {
+		buf.WriteString("\n")
 		resourceElem := elemVal.Interface().(*schema.Resource)
+		buf.WriteString(addIndentation(indentation))
 		buf.WriteString("map[string]interface{}{\n")
 		for key,sch := range resourceElem.Schema {
 			iterateResourceFunc(buf,indentation + CHILDINDEND,key,sch)
 		}
 		buf.WriteString(addIndentation(indentation))
-		buf.WriteString("}\n")
+		buf.WriteString("},\n")
 	} else {
-		getValue(key)
-		switch sch.Type {
-		case schema.TypeInt:
-		case schema.TypeString:
-		case schema.TypeFloat :
-		case schema.TypeBool:
-		}
+		buf.WriteString("\"")
+		buf.WriteString(getValue(parentKey))
+		buf.WriteString("\"")
 	}
 }
 
 func iterateResourceFunc(buf *bytes.Buffer,indentation int,key string,sch *schema.Schema){
+	buf.WriteString(addIndentation(indentation))
+	buf.WriteString(key)
+	buf.WriteString(" : ")
 	switch sch.Type {
 	case schema.TypeInt,schema.TypeString,schema.TypeFloat,schema.TypeBool:
-		buf.WriteString(addIndentation(indentation))
+		buf.WriteString("\"")
+		buf.WriteString(getValue(key))
+		buf.WriteString("\",\n")
+	case schema.TypeSet,schema.TypeList:
+		iterateListFunc(buf,indentation + CHILDINDEND,key,sch)
+	case schema.TypeMap:
+		buf.WriteString("map[string]string{/n")
+		buf.WriteString(addIndentation(indentation + CHILDINDEND))
+		buf.WriteString("\"")
 		buf.WriteString(key)
-		buf.WriteString(" : \"")
+		buf.WriteString("\" : \"")
 		buf.WriteString(getValue(key))
 		buf.WriteString("\"\n")
-	case schema.TypeSet,schema.TypeList:
-		iterateListFunc(buf,indentation,key,sch)
-	case schema.TypeMap:
+		buf.WriteString(addIndentation(indentation))
+		buf.WriteString("}\n")
 	}
 }
+
 
 func getValue(key string)string{
 	return key + "value"
 }
 
-func getConfigMapIterate(indentation int,buf *bytes.Buffer)func(string,*schema.Schema){
-	return func(key string,shc *schema.Schema){
-
-	}
-}
 
 
 
