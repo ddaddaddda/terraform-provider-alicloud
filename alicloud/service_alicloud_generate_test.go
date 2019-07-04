@@ -1,6 +1,7 @@
 package alicloud
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/hashicorp/terraform/helper/schema"
 	"log"
@@ -97,6 +98,124 @@ func TestGenerateNodeByResource(t *testing.T) {
 		println(string(bs))
 	}
 }
+
+type schemaClassify struct {
+	resourceName string
+	forceNewSchema map[string]*schema.Schema
+	requiredSchema map[string]*schema.Schema
+	optionalSchema map[string]*schema.Schema
+	computedSchema map[string]*schema.Schema
+}
+
+func initSchemaClassify(resourceName string)*schemaClassify{
+	provider := Provider().(*schema.Provider)
+	resource := provider.ResourcesMap[resourceName]
+	sc := &schemaClassify{}
+	sc.resourceName = resourceName
+	sc.forceNewSchema = map[string]*schema.Schema{}
+	sc.requiredSchema = map[string]*schema.Schema{}
+	sc.optionalSchema = map[string]*schema.Schema{}
+	sc.computedSchema = map[string]*schema.Schema{}
+
+	for key,sch := range resource.Schema{
+		if isForceNew(sch){
+			sc.forceNewSchema[key] = sch
+		} else if isRequired(sch){
+			sc.requiredSchema[key] = sch
+		} else if isOptional(sch){
+			sc.optionalSchema[key] = sch
+		}
+
+		if isComputed(sch){
+			sc.computedSchema[key] = sch
+		}
+	}
+	return sc
+}
+
+func(sc *schemaClassify)getStep0Config()string{
+	buf :=bytes.NewBufferString("resource ")
+	buf.WriteString(sc.resourceName)
+	buf.WriteString(" default{\n")
+	iterateFunc := func(key string,sch *schema.Schema){
+		buf.WriteString("  " + key + " = \"" + key + "Value\"\n")
+	}
+	sc.iterateRequired(iterateFunc)
+	sc.iterateForceNew(iterateFunc)
+	buf.WriteString("}\n")
+
+	return buf.String()
+}
+
+func TestGetStep0Config(t *testing.T){
+	config := initSchemaClassify("alicloud_instance").getStep0Config()
+	println(config)
+}
+
+
+func(sc *schemaClassify)iterateForceNew(iterateFunc func(key string,sch *schema.Schema)){
+	for key,sch :=range sc.forceNewSchema{
+		iterateFunc(key,sch)
+	}
+}
+
+func(sc *schemaClassify)iterateRequired(iterateFunc func(key string,sch *schema.Schema)){
+	for key,sch :=range sc.requiredSchema{
+		iterateFunc(key,sch)
+	}
+}
+
+func(sc *schemaClassify)iterateOptional(iterateFunc func(key string,sch *schema.Schema)){
+	for key,sch :=range sc.optionalSchema{
+		iterateFunc(key,sch)
+	}
+}
+
+func(sc *schemaClassify)iterateComputed(iterateFunc func(key string,sch *schema.Schema)){
+	for key,sch :=range sc.computedSchema{
+		iterateFunc(key,sch)
+	}
+}
+
+
+func isForceNew(s *schema.Schema)bool{
+	if s.ForceNew {
+		return true
+	}
+	if s.Type == schema.TypeList || s.Type == schema.TypeSet {
+		elemVal := getRealValueType(reflect.ValueOf(s.Elem))
+		if elemVal.Type().String() == "*schema.Resource" {
+			resourceElem := elemVal.Interface().(*schema.Resource)
+			for _,subSchema :=range resourceElem.Schema{
+				if isForceNew(subSchema){
+					return true
+				}
+			}
+			return false
+		}else {
+			subSchema := elemVal.Interface().(*schema.Schema)
+			return subSchema.ForceNew
+		}
+	}
+	return false
+}
+
+func isRequired(s *schema.Schema)bool{
+	return s.Required
+}
+
+func isOptional(s *schema.Schema)bool{
+	return s.Optional
+}
+
+func isComputed(s *schema.Schema)bool{
+	return s.Computed
+}
+
+init
+
+
+
 
 /*func TestAccAlicloudDnsRecordBasic(t *testing.T) {
 
