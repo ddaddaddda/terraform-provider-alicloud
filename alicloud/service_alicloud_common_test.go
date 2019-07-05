@@ -406,15 +406,15 @@ func (b *resourceConfig) configBuild(overwrite bool) ResourceTestAccConfigFunc {
 		} else {
 			primaryConfig = fmt.Sprintf("\n\nresource \"%s\" \"%s\" ", strs[0], strs[1])
 		}
+		fmt.Sprintf(assistantConfig + primaryConfig + valueConvert(0, reflect.ValueOf(b.attributeMap)))
 		return assistantConfig + primaryConfig + valueConvert(0, reflect.ValueOf(b.attributeMap))
 	}
 }
 
 // deal with the parameter common method
 func valueConvert(indentation int, val reflect.Value) string {
+	val = getRealValueType(val)
 	switch val.Kind() {
-	case reflect.Interface:
-		return valueConvert(indentation, reflect.ValueOf(val.Interface()))
 	case reflect.String:
 		return fmt.Sprintf("\"%s\"", val.String())
 	case reflect.Slice:
@@ -465,7 +465,7 @@ func listValueMapChild(indentation int, key string, val reflect.Value) string {
 	var valList []string
 	for i := 0; i < val.Len(); i++ {
 		valList = append(valList, addIndentation(indentation)+key+" "+
-			mapValue(indentation, val.Index(i)))
+			mapValue(indentation, getRealValueType(val.Index(i))))
 	}
 
 	return fmt.Sprintf("%s\n%s", strings.Join(valList, "\n"), addIndentation(indentation))
