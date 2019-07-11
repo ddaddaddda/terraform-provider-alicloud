@@ -6,28 +6,29 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 	"log"
 	"reflect"
+	"sort"
 	"testing"
 )
 
 type treeNode struct {
-	key          string
-	childNodeMap map[string]*treeNode
+	key           string
+	childNodeList []*treeNode
 }
 
 func newTreeNode(key string) *treeNode {
-	return &treeNode{key: key, childNodeMap: make(map[string]*treeNode, 0)}
+	return &treeNode{key: key, childNodeList: make([]*treeNode, 0)}
 }
 
 func (t *treeNode) addChildNode(childNode *treeNode) {
-	t.childNodeMap[childNode.key] = childNode
+	t.childNodeList = append(t.childNodeList,childNode)
 }
 
 func (t *treeNode) getAllBranches() []string {
 	var branches []string
-	if len(t.childNodeMap) == 0 {
+	if len(t.childNodeList) == 0 {
 		branches = append(branches, t.key)
 	} else {
-		for _, child := range t.childNodeMap {
+		for _, child := range t.childNodeList {
 			childBranches := child.getAllBranches()
 			for _, childName := range childBranches {
 				if t.key != "" {
@@ -61,7 +62,7 @@ func generateNodeBySchema(key string, s *schema.Schema) *treeNode {
 	case schema.TypeMap:
 		lenNode := newTreeNode("%")
 		node.addChildNode(lenNode)
-		keyNode := newTreeNode("key")
+		keyNode := newTreeNode("checkKey")
 		node.addChildNode(keyNode)
 	}
 	return node
@@ -179,40 +180,6 @@ func(sc *schemaClassify)iterateComputed(iterateFunc func(key string,sch *schema.
 }
 
 
-func isForceNew(s *schema.Schema)bool{
-	if s.ForceNew {
-		return true
-	}
-	if s.Type == schema.TypeList || s.Type == schema.TypeSet {
-		elemVal := getRealValueType(reflect.ValueOf(s.Elem))
-		if elemVal.Type().String() == "*schema.Resource" {
-			resourceElem := elemVal.Interface().(*schema.Resource)
-			for _,subSchema :=range resourceElem.Schema{
-				if isForceNew(subSchema){
-					return true
-				}
-			}
-			return false
-		}else {
-			subSchema := elemVal.Interface().(*schema.Schema)
-			return subSchema.ForceNew
-		}
-	}
-	return false
-}
-
-func isRequired(s *schema.Schema)bool{
-	return s.Required
-}
-
-func isOptional(s *schema.Schema)bool{
-	return s.Optional
-}
-
-func isComputed(s *schema.Schema)bool{
-	return s.Computed
-}
-
 func buildIterateFunc(indentation int,buf *bytes.Buffer) func(string,*schema.Schema){
 	return func(key string,sch *schema.Schema){
 		iterateSingleFunc(buf,indentation,key,sch)
@@ -291,7 +258,7 @@ resource "alicloud_dns" "default" {
 		"type":        "",
 		"ttl":         "",
 		"priority":    "",
-		"value":       "",
+		"checkValue":       "",
 		"routing":     "",
 		"status":      "",
 		"locked":      "",
@@ -328,12 +295,12 @@ resource "alicloud_dns" "default" {
 					"name":        "",
 					"host_record": "",
 					"type":        "",
-					"value":       "",
+					"checkValue":       "",
 				}),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheck(map[string]string{
 						"name":  fmt.Sprintf("", defaultRegionToTest, rand),
-						"value": "",
+						"checkValue": "",
 					}),
 				),
 			},
@@ -373,10 +340,10 @@ resource "alicloud_dns" "default" {
 			},
 			{
 				Config: testAccConfig(map[string]interface{}{
-					"value": "",
+					"checkValue": "",
 				}),
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheck(map[string]string{"value": ""}),
+					testAccCheck(map[string]string{"checkValue": ""}),
 				),
 			},
 			{
@@ -408,7 +375,7 @@ resource "alicloud_dns" "default" {
 					"name":        "",
 					"host_record": "",
 					"type":        "",
-					"value":       "",
+					"checkValue":       "",
 					"ttl":         "",
 					"priority":    "",
 					"routing":     "",
@@ -421,3 +388,245 @@ resource "alicloud_dns" "default" {
 	})
 
 }*/
+
+type DependResource struct{
+	resourceName string
+	configs []string
+	dependOn []string
+}
+
+type attributeValue struct {
+	sch *schema.Schema
+	value interface{}
+}
+
+func initGenerator(resourceName string)*generator{
+	provider := Provider().(*schema.Provider)
+	resource := provider.ResourcesMap[resourceName]
+	sc := &generator{}
+	sc.resourceName = resourceName
+	sc.forceNewSchema = map[string]*schema.Schema{}
+	sc.requiredSchema = map[string]*schema.Schema{}
+	sc.optionalSchema = map[string]*schema.Schema{}
+	sc.computedSchema = map[string]*schema.Schema{}
+	sc.attributeMap = map[string]*attributeValue{}
+
+	for key,sch := range resource.Schema{
+		if isForceNew(sch){
+			sc.forceNewSchema[key] = sch
+		} else if isRequired(sch){
+			sc.requiredSchema[key] = sch
+		} else if isOptional(sch){
+			sc.optionalSchema[key] = sch
+		}
+
+		if isComputed(sch){
+			sc.computedSchema[key] = sch
+		}
+	}
+	return sc
+}
+
+type generator struct {
+	resourceName string
+	forceNewSchema map[string]*schema.Schema
+	requiredSchema map[string]*schema.Schema
+	optionalSchema map[string]*schema.Schema
+	computedSchema map[string]*schema.Schema
+	dependResourceList []DependResource
+	attributeMap map[string]*attributeValue
+}
+
+func iterateSchemaMap(schMap map[string]*schema.Schema, config map[string]interface{},isChange bool,
+	iterateFunc func(string,*schema.Schema,map[string]interface{},bool)){
+	var schKeys []string
+	for key:=range schMap{
+		schKeys = append(schKeys,key)
+	}
+	sort.Strings(schKeys)
+	for _,key:=range schKeys{
+		iterateFunc(key,schMap[key],config,isChange)
+	}
+}
+
+func(g *generator)getDependResource(resourceName string)(DependResource,bool){
+	for _,dependResource:=range g.dependResourceList{
+		if dependResource.resourceName == resourceName{
+			return dependResource,true
+		}
+	}
+	return DependResource{},false
+}
+
+func(g *generator)addDependResource(dependResource ...DependResource)(DependResource,bool){
+	g.dependResourceList = append(g.dependResourceList,dependResource...)
+	return DependResource{},false
+}
+
+func(g *generator)getStep0(config map[string]interface{},check map[string]string){
+	iterateSchemaMap(g.requiredSchema,config,false,g.getAttributeValue)
+	iterateSchemaMap(g.forceNewSchema,config,false,g.getAttributeValue)
+}
+
+func(g *generator)getAttributeValue(key string,sch *schema.Schema,config map[string]interface{},isChange bool){
+	if val ,ok := config[key];ok{
+		g.attributeMap[key] = &attributeValue{
+			sch:sch,
+			value:val,
+		}
+		return
+	}
+	if val ,ok := bridgeMap[key];ok{
+		g.attributeMap[key] = &attributeValue{
+			sch:sch,
+			value:val,
+		}
+		resourceValue :=resourceMap[val.resourceName]
+		dr :=DependResource{
+			resourceName:resourceValue.resourceName,
+			configs :[]string{resourceValue.resourceName},
+			dependOn :resourceValue.dependOn,
+		}
+		g.dependResourceList = append(g.dependResourceList,dr)
+		return
+	}
+	g.attributeMap[key] = &attributeValue{
+		sch:sch,
+		value:getSchemaDefaultValue(key,sch,false),
+	}
+}
+
+func getSchemaDefaultValue(key string,sch *schema.Schema,isChange bool)interface{}{
+	switch sch.Type {
+	case schema.TypeInt:
+
+		if isChange {
+			return "2"
+		} else {
+			return "1"
+		}
+	case schema.TypeString:
+		if isChange {
+			return key + "String_change"
+		} else {
+			return key + "String"
+		}
+	case schema.TypeFloat:
+		if isChange {
+			return "2.1"
+		} else {
+			return "1.1"
+		}
+	case schema.TypeBool:
+		if sch.Default != nil{
+			if isChange{
+				return !sch.Default.(bool)
+			}
+			return sch.Default.(bool)
+		}
+
+		if isChange {
+			return "true"
+		} else {
+			return "false"
+		}
+
+	case schema.TypeList,schema.TypeSet:
+		return getResourceDefaultValue(key,sch,isChange)
+	case schema.TypeMap:
+		return map[string]string{
+			"test1Key":"test1Value",
+		}
+	}
+	return nil
+}
+
+
+func getResourceDefaultValue(key string,sch *schema.Schema,isChange bool)interface{}{
+	elemVal := getRealValueType(reflect.ValueOf(sch.Elem))
+	if elemVal.Type().String() == "*schema.Resource" {
+		resourceElem := elemVal.Interface().(*schema.Resource)
+		defaultValueMap := map[string]interface{}{}
+		for childKey,childSch := range resourceElem.Schema {
+			defaultValueMap[childKey] = getSchemaDefaultValue(childKey,childSch,isChange)
+		}
+		return defaultValueMap
+	} else {
+		var listOrSet []interface{}
+		listOrSet = append(listOrSet,getSchemaDefaultValue(key,elemVal.Interface().(*schema.Schema),isChange))
+		return listOrSet
+	}
+}
+
+
+
+
+
+func isForceNew(s *schema.Schema)bool{
+	if s.ForceNew {
+		return true
+	}
+	if s.Type == schema.TypeList || s.Type == schema.TypeSet {
+		elemVal := getRealValueType(reflect.ValueOf(s.Elem))
+		if elemVal.Type().String() == "*schema.Resource" {
+			resourceElem := elemVal.Interface().(*schema.Resource)
+			for _,subSchema :=range resourceElem.Schema{
+				if isForceNew(subSchema){
+					return true
+				}
+			}
+			return false
+		}else {
+			subSchema := elemVal.Interface().(*schema.Schema)
+			return subSchema.ForceNew
+		}
+	}
+	return false
+}
+
+func isRequired(s *schema.Schema)bool{
+	return s.Required
+}
+
+func isOptional(s *schema.Schema)bool{
+	return s.Optional
+}
+
+func isComputed(s *schema.Schema)bool{
+	return s.Computed
+}
+
+type checkPair struct {
+	checkKey string
+	checkValue string
+}
+
+
+type checkTree interface {
+	getCheckPairList()[]*checkPair
+}
+
+type leafCheckTree struct {
+	checkKey   string
+	checkValue string
+}
+
+func (l *leafCheckTree)getCheckPairList()[]*checkPair{
+	return []*checkPair{{checkKey:l.checkKey,checkValue:l.checkValue}}
+}
+
+type branchCheckTree struct {
+	key string
+	childCheckTreeList []checkTree
+}
+
+func(b *branchCheckTree)getCheckPairList()[]*checkPair{
+	var list []*checkPair
+	for _,tree:=range b.childCheckTreeList{
+		for _,pair:=range tree.getCheckPairList(){
+			newPair := &checkPair{checkKey: b.key + "." + pair.checkKey ,checkValue:pair.checkValue}
+			list = append(list,newPair)
+		}
+	}
+}
+

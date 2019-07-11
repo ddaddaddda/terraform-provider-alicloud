@@ -23,12 +23,12 @@ import (
 These common test cases are used to creating some dependence resources, like vpc, vswitch and security group.
 */
 
-// be used to check attribute map value
+// be used to check attribute map checkValue
 const (
 	NOSET      = "#NOSET"       // be equivalent to method "TestCheckNoResourceAttrSet"
 	CHECKSET   = "#CHECKSET"    // "TestCheckResourceAttrSet"
-	REMOVEKEY  = "#REMOVEKEY"   // remove checkMap key
-	REGEXMATCH = "#REGEXMATCH:" // "TestMatchResourceAttr" ,the map name/key like `"attribute" : REGEXMATCH + "attributeString"`
+	REMOVEKEY  = "#REMOVEKEY"   // remove checkMap checkKey
+	REGEXMATCH = "#REGEXMATCH:" // "TestMatchResourceAttr" ,the map name/checkKey like `"attribute" : REGEXMATCH + "attributeString"`
 )
 
 const (
@@ -106,7 +106,7 @@ func resourceAttrCheckInit(rc *resourceCheck, ra *resourceAttr) *resourceAttrChe
 	}
 }
 
-// check the resource existence by invoking DescribeXXX method of service and assign *resourceCheck.resourceObject value,
+// check the resource existence by invoking DescribeXXX method of service and assign *resourceCheck.resourceObject checkValue,
 // the service is returned by invoking *resourceCheck.serviceFunc
 func (rc *resourceCheck) checkResourceExists() resource.TestCheckFunc {
 	return func(s *terraform.State) error {
@@ -360,14 +360,14 @@ type resourceConfig struct {
 
 	resourceId string
 
-	// store attribute value that primary resource
+	// store attribute checkValue that primary resource
 	attributeMap map[string]interface{}
 
 	// generate assistant test config
 	configDependence func(name string) string
 }
 
-// according to changeMap to change the attributeMap value
+// according to changeMap to change the attributeMap checkValue
 func (b *resourceConfig) configUpdate(changeMap map[string]interface{}) {
 	newMap := make(map[string]interface{}, len(b.attributeMap))
 	for k, v := range b.attributeMap {
@@ -422,7 +422,7 @@ func valueConvert(indentation int, val reflect.Value) string {
 	case reflect.Map:
 		return mapValue(indentation, val)
 	default:
-		log.Panicf("the map value must be string  map or slice type! %s", val)
+		log.Panicf("the map checkValue must be string  map or slice type! %s", val)
 	}
 	return ""
 }
@@ -538,13 +538,13 @@ type dataSourceTestAccConfig struct {
 	// be equal to testCase config string,but the result has only one record
 	existConfig string
 
-	// if the dataSourceAttr.existMapFunc returned map value not match we want, existChangMap can alter checkMap for existConfig
+	// if the dataSourceAttr.existMapFunc returned map checkValue not match we want, existChangMap can alter checkMap for existConfig
 	existChangMap map[string]string
 
 	// be equal to testCase config string,but the result is empty
 	fakeConfig string
 
-	// if the dataSourceAttr.fakeMapFunc returned map value not match we want, fakeChangMap can alter checkMap for fakeConfig
+	// if the dataSourceAttr.fakeMapFunc returned map checkValue not match we want, fakeChangMap can alter checkMap for fakeConfig
 	fakeChangMap map[string]string
 }
 
