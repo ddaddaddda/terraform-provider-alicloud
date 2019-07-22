@@ -628,5 +628,5 @@ func(b *branchCheckTree)getCheckPairList()[]*checkPair{
 			list = append(list,newPair)
 		}
 	}
+	return nil
 }
-
