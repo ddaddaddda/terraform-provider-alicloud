@@ -1,6 +1,8 @@
 package generate
 
-import "fmt"
+import (
+	"fmt"
+)
 
 var resourceMap = map[string]DependResource{
 	"alicloud_dns": {
