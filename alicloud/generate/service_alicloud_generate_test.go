@@ -1,11 +1,9 @@
 package generate
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/terraform-providers/terraform-provider-alicloud/alicloud"
-	"testing"
+	"reflect"
 )
 
 
@@ -107,73 +105,6 @@ func (g *generate)getStep0(changeConfigMap map[string]interface{},changeCheckMap
 	return Step{ConfigMap: configMap, CheckMap:checkMap}
 }
 
-
-func TestGetStep0(t *testing.T){
-	name := fmt.Sprintf("tf-testAccEcsInstanceDataDisks%d",  13344)
-	gt:=initGenerator("alicloud_instance")
-	step := gt.getStep0(map[string]interface{}{
-		"image_id":        "${data.alicloud_images.default.images.0.id}",
-		"security_groups": []string{"${alicloud_security_group.default.0.id}"},
-		"instance_type":   "${data.alicloud_instance_types.default.instance_types.0.id}",
-
-		"availability_zone":             "${data.alicloud_zones.default.zones.0.id}",
-		"system_disk_category":          "cloud_efficiency",
-		"instance_name":                 "${var.name}",
-		"key_name":                      "${alicloud_key_pair.default.key_name}",
-		"spot_strategy":                 "NoSpot",
-		"spot_price_limit":              "0",
-		"security_enhancement_strategy": "Active",
-		"user_data":                     "I_am_user_data",
-
-		"instance_charge_type": "PrePaid",
-		"vswitch_id":           "${alicloud_vswitch.default.id}",
-		"role_name":            "${alicloud_ram_role.default.name}",
-		"data_disks": []map[string]string{
-			{
-				"name":        "disk1",
-				"size":        "20",
-				"category":    "cloud_efficiency",
-				"description": "disk1",
-			},
-			{
-				"name":        "disk2",
-				"size":        "20",
-				"category":    "cloud_efficiency",
-				"description": "disk2",
-			},
-		},
-		"force_delete": "true",
-	},map[string]string{
-		"instance_name": name,
-		"key_name":      name,
-		"role_name":     name,
-		"user_data":     "I_am_user_data",
-
-		"data_disks.#":             "2",
-		"data_disks.0.name":        "disk1",
-		"data_disks.0.size":        "20",
-		"data_disks.0.category":    "cloud_efficiency",
-		"data_disks.0.description": "disk1",
-		"data_disks.1.name":        "disk2",
-		"data_disks.1.size":        "20",
-		"data_disks.1.category":    "cloud_efficiency",
-		"data_disks.1.description": "disk2",
-
-		"force_delete":         "true",
-		"instance_charge_type": "PrePaid",
-		"period":               "1",
-		"period_unit":          "Month",
-		"renewal_status":       "Normal",
-		"auto_renew_period":    "0",
-		"include_data_disks":   "true",
-		"dry_run":              "false",
-	})
-	bs,_:=json.Marshal(step)
-	println(string(bs))
-}
-
-
-
 func (g *generate)getStep0Config(changeConfigMap map[string]interface{})map[string]interface{}{
 	configMap := make(map[string]interface{})
 	for key, sch := range g.requiredSchema{
@@ -220,4 +151,69 @@ func (g *generate)getStep0Check(changeCheckMap map[string]string)map[string]stri
 	return checkMap
 }
 
+func (g *generate)getStepNConfig(key string,sch *schema.Schema,changeConfigMap map[string]interface{})(map[string]interface{},map[string]interface{}){
+	configMap := make(map[string]interface{})
+	defaultValue, ok := changeConfigMap[key]
+	if ok {
+		configMap[key] = defaultValue
+	}else if sch.Required {
+		configMap[key] = getSchemaDefaultValue(key,sch,false)
+	} else {
+		configMap[key] = g.getSchemaValue(key,sch,false)
+	}
+	configMap = mapInterfaceValueCopy(configMap,changeConfigMap)
+	reverseConfigMap := make(map[string]interface{})
+	for key,newVal:=range configMap{
+		if oldVal,ok:=g.configMap[key];ok{
+			if !reflect.DeepEqual(newVal,oldVal){
+				reverseConfigMap[key] = oldVal
+			}
+		} else {
+			reverseConfigMap[key] = "#REMOVEKEY"
+		}
+	}
+	return configMap,reverseConfigMap
+}
 
+func (g *generate)getStepNCheck(changeCheckMap map[string]string )(map[string]string,map[string]string){
+	checkAllMap := make(map[string]string,0)
+	for key,val:=range g.configMap{
+		checkNode := getCheckNode(key,g.getSchema(key),val)
+		checkAllMap = mapStringValueCopy(checkAllMap,checkNode.getCheckMap())
+	}
+	checkAllMap = mapStringValueCopy(changeCheckMap, checkAllMap)
+	checkMap := make(map[string]string,0)
+	reverseCheckMap := make(map[string]string,0)
+	for key,newVal:=range checkAllMap {
+		oldVal,ok := g.checkMap[key]
+		if ok {
+			if newVal != oldVal{
+				reverseCheckMap[key] = oldVal
+				checkMap[key] = newVal
+			}
+		}else {
+			checkMap[key] = newVal
+			reverseCheckMap[key] = "#REMOVEKEY"
+		}
+
+	}
+
+	for key :=range g.checkMap {
+		if oldVal,ok := checkAllMap[key];!ok{
+			reverseCheckMap[key] = oldVal
+			checkMap[key] = "#REMOVEKEY"
+		}
+	}
+	return checkMap,reverseCheckMap
+}
+
+
+type StepChange struct{
+	configMap map[string]interface{}
+	checkMap map[string]string
+}
+
+func (g *generate)getStepN(changeMap map[string]StepChange)[]Step{
+	var steps []Step
+
+}
