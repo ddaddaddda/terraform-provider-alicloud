@@ -6,6 +6,7 @@ import (
 	"reflect"
 )
 
+const REMOVEKEY = "#REMOVEKEY"
 
 type DependResource struct {
 	resourceName string
@@ -151,8 +152,9 @@ func (g *generate)getStep0Check(changeCheckMap map[string]string)map[string]stri
 	return checkMap
 }
 
-func (g *generate)getStepNConfig(key string,sch *schema.Schema,changeConfigMap map[string]interface{})(map[string]interface{},map[string]interface{}){
+func (g *generate)getStepNConfig(key string,changeConfigMap map[string]interface{})(map[string]interface{},map[string]interface{}){
 	configMap := make(map[string]interface{})
+	sch := g.getSchema(key)
 	defaultValue, ok := changeConfigMap[key]
 	if ok {
 		configMap[key] = defaultValue
@@ -164,12 +166,12 @@ func (g *generate)getStepNConfig(key string,sch *schema.Schema,changeConfigMap m
 	configMap = mapInterfaceValueCopy(configMap,changeConfigMap)
 	reverseConfigMap := make(map[string]interface{})
 	for key,newVal:=range configMap{
-		if oldVal,ok:=g.configMap[key];ok{
+		if oldVal,ok := g.configMap[key];ok{
 			if !reflect.DeepEqual(newVal,oldVal){
 				reverseConfigMap[key] = oldVal
 			}
 		} else {
-			reverseConfigMap[key] = "#REMOVEKEY"
+			reverseConfigMap[key] = REMOVEKEY
 		}
 	}
 	return configMap,reverseConfigMap
@@ -193,7 +195,7 @@ func (g *generate)getStepNCheck(changeCheckMap map[string]string )(map[string]st
 			}
 		}else {
 			checkMap[key] = newVal
-			reverseCheckMap[key] = "#REMOVEKEY"
+			reverseCheckMap[key] = REMOVEKEY
 		}
 
 	}
@@ -201,7 +203,7 @@ func (g *generate)getStepNCheck(changeCheckMap map[string]string )(map[string]st
 	for key :=range g.checkMap {
 		if oldVal,ok := checkAllMap[key];!ok{
 			reverseCheckMap[key] = oldVal
-			checkMap[key] = "#REMOVEKEY"
+			checkMap[key] = REMOVEKEY
 		}
 	}
 	return checkMap,reverseCheckMap
@@ -215,5 +217,77 @@ type StepChange struct{
 
 func (g *generate)getStepN(changeMap map[string]StepChange)[]Step{
 	var steps []Step
+	for key,change:=range changeMap{
+		configMap ,reverseConfigMap := g.getStepNConfig(key,change.configMap)
+		g.updateConfig(configMap)
+		checkMap,reverseCheckMap := g.getStepNCheck(change.checkMap)
+		g.updateCheck(checkMap)
+		step :=Step{ConfigMap:configMap,ReverseConfigMap:reverseConfigMap,CheckMap:checkMap,ReverseCheckMap:reverseCheckMap}
+		steps = append(steps,step)
+	}
+	return steps
+}
 
+func (g *generate)updateConfig(configMap map[string]interface{}){
+	for key,newVal := range configMap{
+		_ ,ok := g.configMap[key]
+		if ok {
+			if strVal,ok := getRealValueType(reflect.ValueOf(newVal)).Interface().(string);
+				ok && strVal == REMOVEKEY{
+				delete(g.configMap,key)
+			} else {
+				delete(g.configMap,key)
+				g.configMap[key] = newVal
+			}
+		} else {
+			g.configMap[key] = newVal
+		}
+	}
+}
+
+func (g *generate)updateCheck(checkMap map[string]string){
+	for key,newVal := range checkMap{
+		_ ,ok := g.checkMap[key]
+		if ok {
+			if ok && newVal == REMOVEKEY{
+				delete(g.configMap,key)
+			} else {
+				delete(g.checkMap,key)
+				g.checkMap[key] = newVal
+			}
+		} else {
+			g.checkMap[key] = newVal
+		}
+	}
+}
+
+
+func(g *generate)getStepAll(stepNs []Step)Step{
+	configMap := make(map[string]interface{})
+	checkMap := make(map[string]string)
+	for i:=len(stepNs)-1;i>=0;i--{
+		step := stepNs[i]
+		g.updateConfig(step.ReverseConfigMap)
+		g.updateCheck(step.ReverseCheckMap)
+		for key,newVal := range step.ReverseConfigMap{
+			_ ,ok := configMap[key]
+			if ok {
+				delete(g.configMap,key)
+				configMap[key] = newVal
+			} else {
+				configMap[key] = newVal
+			}
+		}
+
+		for key,newVal := range step.ReverseCheckMap{
+			_ ,ok := checkMap[key]
+			if ok {
+				delete(g.checkMap,key)
+				g.checkMap[key] = newVal
+			} else {
+				g.checkMap[key] = newVal
+			}
+		}
+	}
+	return Step{ConfigMap:configMap,CheckMap:checkMap}
 }
