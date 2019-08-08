@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/hashicorp/terraform/helper/schema"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -12,6 +13,8 @@ func getRealValueType(value reflect.Value) reflect.Value {
 	switch value.Kind() {
 	case reflect.Interface:
 		return getRealValueType(reflect.ValueOf(value.Interface()))
+	/*case reflect.Ptr:
+		return getRealValueType(value.Elem())*/
 	default:
 		return value
 	}
@@ -109,3 +112,35 @@ func convertToString(val interface{})string{
 	}
 	panic(fmt.Sprintf("unsupport type %s",value.Type().String()))
 }
+
+func distinctStrings(stringList []string)[]string{
+	var distinct []string
+	if stringList == nil || len(stringList)==0{
+		return distinct
+	} else if len(stringList) == 1{
+		return append(distinct,stringList...)
+	}
+	distinct = append(distinct,stringList...)
+	sort.Strings(distinct)
+	tmp := distinct[0]
+	for i:=1;i<len(distinct);i++{
+		if tmp != distinct[i]{
+			tmp = distinct[i]
+		} else {
+			start := i
+			i++
+			for i < len(distinct){
+				if tmp == distinct[i]{
+					i++
+				} else {
+					break
+				}
+			}
+			end := i
+			distinct = append(distinct[:start],distinct[end:]...)
+			i = start -1
+		}
+	}
+	return distinct
+}
+
