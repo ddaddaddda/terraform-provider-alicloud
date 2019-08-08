@@ -22,7 +22,7 @@ var resourceMap = map[string]DependResource{
 				availability_zone = "${data.alicloud_zones.default.zones.0.id}"
 			}
            `},
-		dependOn: []string{ "availability_zone" },
+		dependOn: []string{ "alicloud_zones" },
 	},
 
 	"alicloud_images": {
@@ -86,14 +86,44 @@ var resourceMap = map[string]DependResource{
            `},
 		dependOn: []string{ "alicloud_vpc"},
 	},
+	"alicloud_ram_role": {
+		resourceName: "alicloud_ram_role",
+		configs: []string{`
+			resource "alicloud_ram_role" "default" {
+				name = "${var.name}"
+				services = ["ecs.aliyuncs.com"]
+				force = "true"
+			}
+           `},
+		dependOn: []string{ },
+	},
+	"alicloud_key_pair": {
+		resourceName: "alicloud_key_pair",
+		configs: []string{`
+			resource "alicloud_key_pair" "default" {
+				key_name = "${var.name}"
+			}
+           `},
+		dependOn: []string{ },
+	},
 
 }
 
-var bridgeMap = map[string]bridgeMapValue{}
+var bridgeMap = map[string]bridgeMapValue{
+	"image_id":        {"${data.alicloud_images.default.images.0.id}","alicloud_images"},
+	"security_groups": {[]string{"${alicloud_security_group.default.0.id}"},"alicloud_security_group"},
+	"instance_type":   {"${data.alicloud_instance_types.default.instance_types.0.id}","alicloud_instance_types"},
+
+	"availability_zone":             {"${data.alicloud_zones.default.zones.0.id}","alicloud_zones"},
+	"key_name":                      {"${alicloud_key_pair.default.key_name}","alicloud_key_pair"},
+
+	"vswitch_id": {"${alicloud_vswitch.default.id}","alicloud_vswitch"},
+	"role_name":  {"${alicloud_ram_role.default.name}","alicloud_ram_role"},
+}
 
 
 type bridgeMapValue struct {
-	keyValue     string
+	keyValue     interface{}
 	resourceName string
 }
 
@@ -115,15 +145,5 @@ func hasDependResource(resourceName string)bool{
 
 /*variable "name" {
 default = "%s"
-}
-
-resource "alicloud_ram_role" "default" {
-name = "${var.name}"
-services = ["ecs.aliyuncs.com"]
-force = "true"
-}
-
-resource "alicloud_key_pair" "default" {
-key_name = "${var.name}"
 }
 */

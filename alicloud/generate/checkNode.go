@@ -4,6 +4,7 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type checkNode interface {
@@ -47,7 +48,7 @@ func getBasicCheckNode(key string,sch *schema.Schema,val reflect.Value) checkNod
 	val = getRealValueType(val)
 	switch sch.Type {
 	case schema.TypeBool,schema.TypeInt,schema.TypeFloat,schema.TypeString:
-		return &leafCheckNode{checkKey:key,checkValue:val.String()}
+		return &leafCheckNode{checkKey:key,checkValue:convertValue(val.String())}
 	case schema.TypeMap:
 		return getMapCheckNode(key,val)
 	case schema.TypeList:
@@ -68,7 +69,7 @@ func getMapCheckNode(key string,val reflect.Value)checkNode{
 		childValReflectVal := getRealValueType(val.MapIndex(keyReflectVal))
 		childKey := keyReflectVal.String()
 		childVal := childValReflectVal.String()
-		childNode:= &leafCheckNode{checkKey:childKey,checkValue:childVal}
+		childNode:= &leafCheckNode{checkKey:childKey,checkValue:convertValue(childVal)}
 		bNode.addChildCheckNode(childNode)
 	}
 
@@ -98,7 +99,7 @@ func getListCheckNode(key string,sch *schema.Schema,val reflect.Value)checkNode{
 		for i:=0;i<val.Len();i++{
 			indexCheckNode := &leafCheckNode{
 				checkKey:strconv.FormatInt(int64(i),10),
-				checkValue:getRealValueType(val.Index(i)).String(),
+				checkValue:convertValue(getRealValueType(val.Index(i)).String()),
 			}
 			bNode.addChildCheckNode(indexCheckNode)
 		}
@@ -112,7 +113,6 @@ func getSetCheckNode(key string,sch *schema.Schema,val reflect.Value)checkNode{
 
 	lenNode := &leafCheckNode{checkKey:"#",checkValue:strconv.FormatInt(int64(val.Len()),10)}
 	bNode.addChildCheckNode(lenNode)
-
 	if isSchemaResource(sch.Elem){
 		for i:=0;i<val.Len();i++{
 			childReflectVal := getRealValueType(val.Index(i))
@@ -137,13 +137,20 @@ func getSetCheckNode(key string,sch *schema.Schema,val reflect.Value)checkNode{
 
 			hashCheckNode := &leafCheckNode{
 				checkKey:strconv.FormatInt(int64(hashcode),10),
-				checkValue:getRealValueType(val.Index(i)).String(),
+				checkValue:convertValue(getRealValueType(val.Index(i)).String()),
 			}
 			bNode.addChildCheckNode(hashCheckNode)
 		}
 	}
 
 	return bNode
+}
+
+func convertValue(strValue string)string{
+	if strings.Contains(strValue,"$"){
+		return CHECKSET
+	}
+	return strValue
 }
 
 func getHashFunc(sch *schema.Schema)schema.SchemaSetFunc{

@@ -107,7 +107,7 @@ func (g *generate) getSchemaValue(key string, sch *schema.Schema, isChange bool)
 			dependResource := getDependFromResourceMap(val.resourceName)
 			g.addDependResource(dependResource)
 		}
-		return val.resourceName
+		return val.keyValue
 	}
 	return getSchemaDefaultValue(key, sch, isChange)
 }
@@ -388,7 +388,7 @@ func (g *generate) getConfigDependence() string {
 
 
 	return fmt.Sprintf(`func (name string) string {
-		return fmt.Sprintf(` + "`\n%s\n" +"	  `, name)\n}",strings.Join(configList, "\n'"))
+		return fmt.Sprintf(` + "`\n%s\n" +"	  `, name)\n}",strings.Join(configList, "\n"))
 }
 
 func(g *generate)outPutTestCode(w io.Writer){
@@ -447,25 +447,25 @@ func(g *generate)outPutTestCode(w io.Writer){
 
 func TestSearchMethod(t *testing.T){
 	g := initGenerator("alicloud_instance")
+	configs := []string{
+		`
+		variable "name"{
+			default = "tf-testAccInstanceBasic"
+		}
+		`,
+	}
+	d := DependResource{resourceName:"name",configs:configs,dependOn:[]string{}}
+	g.addDependResource(d)
 	g.Step0(map[string]interface{}{
-			/*"image_id":        "${data.alicloud_images.default.images.0.id}",
-			"security_groups": []string{"${alicloud_security_group.default.0.id}","123"},
-			"instance_type":   "${data.alicloud_instance_types.default.instance_types.0.id}",
-
-			"availability_zone":             "${data.alicloud_zones.default.zones.0.id}",
 			"system_disk_category":          "cloud_efficiency",
 			"instance_name":                 "${var.name}",
-			"key_name":                      "${alicloud_key_pair.default.key_name}",
 			"spot_strategy":                 "NoSpot",
 			"spot_price_limit":              "0",
 			"security_enhancement_strategy": "Active",
 			"user_data":                     "I_am_user_data",
-
-			"vswitch_id": "${alicloud_vswitch.default.id}",
-			"role_name":  "${alicloud_ram_role.default.name}",*/
 		},
 		map[string]string{
-			/*"image_id":          CHECKSET,
+			"image_id":          CHECKSET,
 			"instance_type":     CHECKSET,
 			"security_groups.#": "1",
 
@@ -503,7 +503,7 @@ func TestSearchMethod(t *testing.T){
 			"auto_renew_period":  NOSET,
 			"force_delete":       NOSET,
 			"include_data_disks": NOSET,
-			"dry_run":            NOSET,*/
+			"dry_run":            NOSET,
 		},
 		)
 	g.StepN(nil)
