@@ -38,6 +38,9 @@ func initGenerator(resourceName string) *generate {
 	sc.checkMap = map[string]string{}
 
 	for key, sch := range resource.Schema {
+		if sch.Deprecated != "" {
+			continue
+		}
 		if isForceNew(sch) {
 			sc.forceNewSchema[key] = sch
 		} else if isRequired(sch) {
@@ -388,7 +391,10 @@ func (g *generate) getConfigDependence() string {
 
 
 	return fmt.Sprintf(`func (name string) string {
-		return fmt.Sprintf(` + "`\n%s\n" +"	  `, name)\n}",strings.Join(configList, "\n"))
+		return fmt.Sprintf(` + "`" + "\n" +
+`            variable "name"{
+				default = "tf-testAcc%%s"
+			}` + "\n%s\n" +"	  `, name)\n}",strings.Join(configList, "\n"))
 }
 
 func(g *generate)outPutTestCode(w io.Writer){
@@ -402,7 +408,7 @@ func(g *generate)outPutTestCode(w io.Writer){
 	resourceConfigDependence := g.getConfigDependence()
 
 
-	io.WriteString(w,"func TestAccAlicloud" + strings.Replace(g.describeMethod,"Describe","",0) + "Basic(t *testing.T) {\n")
+	io.WriteString(w,"func TestAccAlicloud" + strings.Replace(g.describeMethod,"Describe","",-1) + "Basic(t *testing.T) {\n")
 	io.WriteString(w,fmt.Sprintf("    var v %s\n\n",responseType))
 
 	io.WriteString(w,fmt.Sprintf("    resourceId := \"%s\"\n",resourceId))
@@ -416,7 +422,7 @@ func(g *generate)outPutTestCode(w io.Writer){
 	io.WriteString(w,"    testAccCheck := rac.resourceAttrMapUpdateSet()\n")
 	io.WriteString(w,fmt.Sprintf("    name := \"%s\"\n\n",g.name))
 
-	io.WriteString(w,fmt.Sprintf("    resourceConfigDependence = %s\n\n",resourceConfigDependence))
+	io.WriteString(w,fmt.Sprintf("    resourceConfigDependence := %s\n\n",resourceConfigDependence))
 
 	io.WriteString(w,"    testAccConfig := resourceTestAccConfigFunc(resourceId, name, resourceConfigDependence)\n\n")
 
@@ -426,19 +432,19 @@ func(g *generate)outPutTestCode(w io.Writer){
 		io.WriteString(w,fmt.Sprintf("            %s\n",preCheck))
 	}
 	io.WriteString(w,"        },\n")
-	io.WriteString(w,fmt.Sprintf("        IDRefreshName: %s,\n",resourceId))
+	io.WriteString(w,"        IDRefreshName: resourceId,\n")
 	io.WriteString(w,fmt.Sprintf("        Providers:     %s,\n",g.providers))
 	io.WriteString(w,"        CheckDestroy:  rac.checkResourceDestroy(),\n")
 	io.WriteString(w,"        Steps: []resource.TestStep{\n")
 
 	g.step0.outPut(12,w)
-	io.WriteString(w,"\n")
+	io.WriteString(w,",\n")
 	for _,step :=range g.stepN{
 		step.outPut(12,w)
-		io.WriteString(w,"\n")
+		io.WriteString(w,",\n")
 	}
 	g.stepAll.outPut(12,w)
-	io.WriteString(w,"\n")
+	io.WriteString(w,",\n")
 	io.WriteString(w,"        },\n")
 	io.WriteString(w,"    })\n")
 	io.WriteString(w,"}\n")
@@ -447,15 +453,6 @@ func(g *generate)outPutTestCode(w io.Writer){
 
 func TestSearchMethod(t *testing.T){
 	g := initGenerator("alicloud_instance")
-	configs := []string{
-		`
-		variable "name"{
-			default = "tf-testAccInstanceBasic"
-		}
-		`,
-	}
-	d := DependResource{resourceName:"name",configs:configs,dependOn:[]string{}}
-	g.addDependResource(d)
 	g.Step0(map[string]interface{}{
 			"system_disk_category":          "cloud_efficiency",
 			"instance_name":                 "${var.name}",
@@ -514,5 +511,3 @@ func TestSearchMethod(t *testing.T){
 
 	//getStructNameAboutChectExist("DescribeInstance")
 }
-
-

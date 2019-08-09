@@ -79,7 +79,9 @@ func mapString(w io.Writer,indentation int, reflectVal reflect.Value){
 		childKey := childKeyReflectVal.String()
 		childValueReflectVal := reflectVal.MapIndex(childKeyReflectVal)
 		io.WriteString(w,addIndentation(indentation + CHILDINDEND))
+		io.WriteString(w,"\"")
 		io.WriteString(w,childKey)
+		io.WriteString(w,"\"")
 		io.WriteString(w," : ")
 		commonString(w,indentation + CHILDINDEND,childValueReflectVal)
 		io.WriteString(w,",\n")
@@ -127,7 +129,9 @@ func checkMapString(w io.Writer,indentation int, checkMap map[string]string){
 
 	for key, val :=range checkMap{
 		io.WriteString(w,addIndentation(indentation + CHILDINDEND))
+		io.WriteString(w,"\"")
 		io.WriteString(w,key)
+		io.WriteString(w,"\"")
 		io.WriteString(w," : ")
 		if val == REMOVEKEY || val == CHECKSET || val == NOSET || strings.HasPrefix(val,REGEXMATCH){
 			io.WriteString(w,fmt.Sprintf("%s",val))
